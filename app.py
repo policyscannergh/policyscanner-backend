@@ -19,7 +19,18 @@ ALLOWED_ORIGINS = [
 ]
 CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+_openai_client: OpenAI | None = None
+
+
+def get_openai_client() -> OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        _openai_client = OpenAI(api_key=api_key)
+    return _openai_client
+
 
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp", "txt"}
 MAX_FILE_BYTES = 15 * 1024 * 1024
@@ -147,7 +158,7 @@ def parse_insurance_document(text: str) -> dict:
         f"{text}"
     )
 
-    response = client.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
