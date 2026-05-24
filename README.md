@@ -7,7 +7,7 @@ Powers [policyscanner.co.uk](https://policyscanner.co.uk).
 ## Stack
 
 - **Flask** + **gunicorn** (Python 3.12 in production)
-- **OpenAI** `gpt-4.1-mini` with JSON-mode for structured extraction
+- **Anthropic Claude** `claude-opus-4-7` with prompt caching on the system + schema prefix
 - **pdfplumber** for native PDF text extraction
 - **pytesseract** + **poppler** for OCR fallback on scanned PDFs
 - **Docker** for deploy (Railway)
@@ -47,7 +47,7 @@ Powers [policyscanner.co.uk](https://policyscanner.co.uk).
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # then fill in OPENAI_API_KEY
+cp .env.example .env   # then fill in ANTHROPIC_API_KEY
 python app.py
 ```
 
@@ -58,7 +58,7 @@ App runs on `http://localhost:5000`. OCR fallback needs `tesseract` and `poppler
 1. Push to GitHub.
 2. Railway → New Project → Deploy from GitHub → pick this repo.
 3. Railway auto-detects the `Dockerfile` (gives us tesseract + poppler).
-4. Add env var `OPENAI_API_KEY`.
+4. Add env var `ANTHROPIC_API_KEY`.
 5. Railway exposes a public URL — note it for the frontend's `NEXT_PUBLIC_API_URL`.
 
 ## Why

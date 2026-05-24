@@ -3,11 +3,11 @@ import json
 import os
 import tempfile
 
+import anthropic
 import pdfplumber
 import pytesseract
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from openai import OpenAI
 from PIL import Image
 
 app = Flask(__name__)
@@ -19,24 +19,25 @@ ALLOWED_ORIGINS = [
 ]
 CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
 
-_openai_client: OpenAI | None = None
+_anthropic_client: anthropic.Anthropic | None = None
 
 
-def get_openai_client() -> OpenAI:
-    global _openai_client
-    if _openai_client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
+def get_anthropic_client() -> anthropic.Anthropic:
+    global _anthropic_client
+    if _anthropic_client is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            raise RuntimeError("OPENAI_API_KEY is not set")
-        _openai_client = OpenAI(api_key=api_key)
-    return _openai_client
+            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        _anthropic_client = anthropic.Anthropic(api_key=api_key)
+    return _anthropic_client
 
 
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp", "txt"}
 MAX_FILE_BYTES = 15 * 1024 * 1024
 MIN_TEXT_CHARS = 50
 MAX_TEXT_CHARS = 60_000
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7")
+MAX_OUTPUT_TOKENS = 16_000
 
 
 def allowed_file(filename: str) -> bool:
@@ -90,7 +91,7 @@ def extract_text(filepath: str, filename: str) -> str:
     return ""
 
 
-SYSTEM_PROMPT = """You are an expert UK home insurance document parser.
+SYSTEM_PROMPT_HEADER = """You are an expert UK home insurance document parser.
 
 Extract structured information from a home insurance renewal schedule, policy schedule, quote, or related document.
 
@@ -146,29 +147,41 @@ JSON_TEMPLATE = """{
 }"""
 
 
+CACHED_SYSTEM_PROMPT = (
+    SYSTEM_PROMPT_HEADER
+    + "\nReturn JSON in this exact structure (same keys, same nesting):\n\n"
+    + JSON_TEMPLATE
+)
+
+
 def parse_insurance_document(text: str) -> dict:
     if len(text) > MAX_TEXT_CHARS:
         text = text[:MAX_TEXT_CHARS]
 
     user_prompt = (
         "Extract all relevant home insurance information from the document text below. "
-        "Return JSON in this exact structure (same keys, same nesting):\n\n"
-        f"{JSON_TEMPLATE}\n\n"
+        "Return only the JSON object — no prose, no markdown fences.\n\n"
         "Document text:\n\n"
         f"{text}"
     )
 
-    response = get_openai_client().chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
+    response = get_anthropic_client().messages.create(
+        model=ANTHROPIC_MODEL,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        system=[
+            {
+                "type": "text",
+                "text": CACHED_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
         ],
-        temperature=0,
-        response_format={"type": "json_object"},
+        messages=[{"role": "user", "content": user_prompt}],
     )
 
-    content = response.choices[0].message.content or ""
+    content = next(
+        (block.text for block in response.content if block.type == "text"),
+        "",
+    )
 
     try:
         return json.loads(content)
@@ -183,7 +196,7 @@ def index():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"ok": True, "model": OPENAI_MODEL})
+    return jsonify({"ok": True, "model": ANTHROPIC_MODEL})
 
 
 @app.route("/upload", methods=["POST"])
