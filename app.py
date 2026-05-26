@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import tempfile
 
 import anthropic
@@ -16,6 +17,7 @@ ALLOWED_ORIGINS = [
     "https://policyscanner.co.uk",
     "https://www.policyscanner.co.uk",
     "http://localhost:3000",
+    re.compile(r"^https://policyscanner-frontend(-[a-z0-9-]+)?\.vercel\.app$"),
 ]
 CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
 
