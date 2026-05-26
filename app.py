@@ -185,10 +185,18 @@ def parse_insurance_document(text: str) -> dict:
         "",
     )
 
+    cleaned = _strip_json_fences(content)
     try:
-        return json.loads(content)
+        return json.loads(cleaned)
     except json.JSONDecodeError:
         return {"error": "AI parser did not return valid JSON", "raw_response": content}
+
+
+def _strip_json_fences(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+    text = re.sub(r"\n?```\s*$", "", text)
+    return text.strip()
 
 
 @app.route("/", methods=["GET"])
